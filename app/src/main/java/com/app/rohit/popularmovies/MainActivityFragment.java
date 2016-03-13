@@ -2,7 +2,6 @@ package com.app.rohit.popularmovies;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
@@ -16,27 +15,22 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.GridView;
+import android.widget.Toast;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * A placeholder fragment containing a simple view.
- */
+import butterknife.Bind;
+import butterknife.ButterKnife;
+import retrofit2.Response;
+
 public class MainActivityFragment extends Fragment {
-    private ArrayList<MovieDetails> movieDetailsList;
+    private List<DiscoverMovieData.Result> movieDetailsList;
     private List<String> moviePathList;
-    private GridView gridView;
+    private MoviePosterAdapter moviePosterAdapter;
+
+    @Bind(R.id.grid_movies) protected GridView gridView;
 
     private final Integer FROM_MAINACTIVITY_TO_SETTINGS = 111;
     private final String LOG_TAG = MainActivityFragment.class.getSimpleName();
@@ -57,12 +51,17 @@ public class MainActivityFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_main, container, false);
-        gridView = (GridView) view.findViewById(R.id.grid_movies);
-        if(savedInstanceState == null || !savedInstanceState.containsKey(KEY_MOVIE_DETAILS_LIST)){
-            new DiscoverMoviesTask().execute();
-        }else{
+        ButterKnife.bind(this, view);
+        if (savedInstanceState == null || !savedInstanceState.containsKey(KEY_MOVIE_DETAILS_LIST)) {
+            new DownloadTask().execute();
+        } else {
             movieDetailsList = savedInstanceState.getParcelableArrayList(KEY_MOVIE_DETAILS_LIST);
-            setListView();
+            if (movieDetailsList != null && !movieDetailsList.isEmpty()) {
+                setListView();
+            } else {
+                new DownloadTask().execute();
+                Log.d(LOG_TAG, "onCreateView() -> savedInstanceState contains KEY_MOVIE_DETAILS_LIST's value empty or null");
+            }
         }
         decideTitle();
         return view;
@@ -76,13 +75,17 @@ public class MainActivityFragment extends Fragment {
 
     @Override
     public void onSaveInstanceState(Bundle outState) {
-        outState.putParcelableArrayList(KEY_MOVIE_DETAILS_LIST, movieDetailsList);
+        if (movieDetailsList != null && !movieDetailsList.isEmpty()) {
+            outState.putParcelableArrayList(KEY_MOVIE_DETAILS_LIST, new ArrayList<>(movieDetailsList));
+        } else {
+            Log.d(LOG_TAG, "onSaveInstanceState() -> movieDetailsList is empty or null");
+        }
         super.onSaveInstanceState(outState);
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch(item.getItemId()){
+        switch (item.getItemId()) {
             case R.id.action_settings:
                 startActivityForResult(new Intent(getActivity(), SettingsActivity.class), FROM_MAINACTIVITY_TO_SETTINGS);
                 break;
@@ -91,157 +94,125 @@ public class MainActivityFragment extends Fragment {
 
     }
 
-    private void decideTitle(){
+    private void decideTitle() {
         String title = getString(R.string.title_activity_main);
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        String sortBy = sharedPreferences.getString(getString(R.string.action_sort_by_key), getString(R.string.action_sort_by_default));
-        if(sortBy.equals(getString(R.string.action_sort_by_value_most_popular))){
-            title = title + "-" + getString(R.string.action_sort_by_entry_most_popular);
-        }else if(sortBy.equals(getString(R.string.action_sort_by_value_highest_rated))){
-            title = title + "-" + getString(R.string.action_sort_by_entry_highest_rated);
+        if (sharedPreferences.contains(getString(R.string.action_sort_by_key))) {
+            String sortBy = sharedPreferences.getString(getString(R.string.action_sort_by_key), getString(R.string.action_sort_by_default));
+            if (sortBy.equals(getString(R.string.action_sort_by_value_most_popular))) {
+                title = title + "-" + getString(R.string.action_sort_by_entry_most_popular);
+            } else if (sortBy.equals(getString(R.string.action_sort_by_value_highest_rated))) {
+                title = title + "-" + getString(R.string.action_sort_by_entry_highest_rated);
+            }
+        } else {
+            Log.d(LOG_TAG, "decideTitle() -> sharedPreferences doesn't contain action_sort_by_key");
         }
         getActivity().setTitle(title);
     }
 
-    private void setListView(){
+    private void setListView() {
         moviePathList = new ArrayList<>();
-        for(MovieDetails movieDetails: movieDetailsList){
-            moviePathList.add(movieDetails.posterPath);
+        for (DiscoverMovieData.Result movieDetails : movieDetailsList) {
+            moviePathList.add(movieDetails.getPoster_path());
         }
 
-        MoviePosterAdapter moviePosterAdapter = new MoviePosterAdapter(getActivity(), moviePathList);
+        moviePosterAdapter = new MoviePosterAdapter(getActivity(), moviePathList);
         gridView.setAdapter(moviePosterAdapter);
 
         gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
                 Intent intent = new Intent(getActivity(), MovieDetailsActivity.class);
-                MovieDetails movieDetails = movieDetailsList.get(i);
-                intent.putExtra(EXTRA_ORIGINAL_TITLE, movieDetails.originalTitle);
-                intent.putExtra(EXTRA_OVERVIEW, movieDetails.overview);
-                intent.putExtra(EXTRA_POSTER_PATH, movieDetails.posterPath);
-                intent.putExtra(EXTRA_RELEASE_DATE, movieDetails.releaseDate);
-                intent.putExtra(EXTRA_VOTE_AVERAGE, movieDetails.voteAverage);
+                DiscoverMovieData.Result movieDetails = movieDetailsList.get(i);
+                if (movieDetails != null) {
+                    intent.putExtra(EXTRA_ORIGINAL_TITLE, movieDetails.getOriginal_title());
+                    intent.putExtra(EXTRA_OVERVIEW, movieDetails.getOverview());
+                    intent.putExtra(EXTRA_POSTER_PATH, movieDetails.getPoster_path());
+                    intent.putExtra(EXTRA_RELEASE_DATE, movieDetails.getRelease_date());
+                    intent.putExtra(EXTRA_VOTE_AVERAGE, movieDetails.getVote_average());
+                } else {
+                    Log.d(LOG_TAG, "gridView onItemClickListener() -> movieDetails retrieved is null");
+                }
                 getActivity().startActivity(intent);
             }
         });
     }
 
-    private class DiscoverMoviesTask extends AsyncTask<Void, Void, Void>{
-        private final String LOG_TAG = DiscoverMoviesTask.class.getSimpleName();
+    private class DownloadTask extends AsyncTask<Void, Integer, Void> {
+        private final String LOG_TAG = DownloadTask.class.getSimpleName();
+        private Integer INTERNET_ERROR_CODE = 1;
 
         @Override
         protected Void doInBackground(Void... voids) {
-            HttpURLConnection urlConnection = null;
-            BufferedReader reader = null;
             String sortMethod = null;
-
             SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-            String sortMethodInPreference = sharedPreferences.getString(getString(R.string.action_sort_by_key), getString(R.string.action_sort_by_default));
-            if(sortMethodInPreference.equals(getString(R.string.action_sort_by_value_most_popular))){
-                sortMethod = "popularity.desc";
-            }else if(sortMethodInPreference.equals(getString(R.string.action_sort_by_value_highest_rated))){
-                sortMethod = "vote_average.desc";
+            if (sharedPreferences.contains(getString(R.string.action_sort_by_key))) {
+                String sortMethodInPreference = sharedPreferences.getString(getString(R.string.action_sort_by_key), getString(R.string.action_sort_by_default));
+                if (sortMethodInPreference.equals(getString(R.string.action_sort_by_value_most_popular))) {
+                    sortMethod = "popularity.desc";
+                } else if (sortMethodInPreference.equals(getString(R.string.action_sort_by_value_highest_rated))) {
+                    sortMethod = "vote_average.desc";
+                }
+            } else {
+                Log.d(LOG_TAG, "donInBackground() -> sharedPreferences doesn't contain action_sort_by_key");
             }
-            String apiKey = BuildConfig.THEMOVIEDB_API_KEY;
 
+            RetrofitDownloadRestAdapter retrofitDownloadRestAdapter = new RetrofitDownloadRestAdapter();
             try {
-                final String FORECAST_BASE_URL = "http://api.themoviedb.org/3/discover/movie";
-                final String SORTBY = "sort_by";
-                final String APIKEY = "api_key";
-
-                Uri builtUri = Uri.parse(FORECAST_BASE_URL).buildUpon()
-                        .appendQueryParameter(SORTBY, sortMethod)
-                        .appendQueryParameter(APIKEY, apiKey)
-                        .build();
-
-                URL url = new URL(builtUri.toString());
-
-                urlConnection = (HttpURLConnection) url.openConnection();
-                urlConnection.setRequestMethod("GET");
-                urlConnection.connect();
-
-                InputStream inputStream = urlConnection.getInputStream();
-                StringBuilder buffer = new StringBuilder();
-                if (inputStream == null) {
-                    movieDetailsList = null;
-                    moviePathList = null;
-                }
-                else{
-                    reader = new BufferedReader(new InputStreamReader(inputStream));
-
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        buffer.append(line.concat("\n"));
+                Response<DiscoverMovieData> response = retrofitDownloadRestAdapter.discoverMovies(sortMethod).execute();
+                DiscoverMovieData discoverMovieData = response.body();
+                if (discoverMovieData != null) {
+                    movieDetailsList = discoverMovieData.getResults();
+                    /*
+                    logic to remove movies where poster path is null
+                    because we are just showing poster to user
+                    and if there is no poster, user will get no information about what movie it is
+                     */
+                    int size = movieDetailsList.size();
+                    for(int i = 0; i < size; i++){
+                        DiscoverMovieData.Result result = movieDetailsList.get(i);
+                        if (result.getPoster_path() == null || result.getPoster_path().equals("null")) {
+                            movieDetailsList.remove(result);
+                        }
                     }
-
-                    if (buffer.length() == 0) {
-                        movieDetailsList = null;
-                        moviePathList = null;
-                    }
-                    Log.v(LOG_TAG, buffer.toString());
-                    movieDetailsList = new ArrayList<>(retrieveMovieDetails(buffer.toString()));
+                } else {
+                    Log.d(LOG_TAG, "doInBackground() -> reponse from server has no body");
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
+                publishProgress(INTERNET_ERROR_CODE);
                 Log.e(LOG_TAG, e.getMessage());
                 movieDetailsList = null;
                 moviePathList = null;
-            } finally{
-                if (urlConnection != null) {
-                    urlConnection.disconnect();
-                }
-                if (reader != null) {
-                    try {
-                        reader.close();
-                    } catch (final IOException e) {
-                        Log.e(LOG_TAG, e.getMessage());
-                        movieDetailsList = null;
-                        moviePathList = null;
-                    }
-                }
             }
             return null;
         }
 
-        private List<MovieDetails> retrieveMovieDetails(String str) throws JSONException{
-            final String RESULTS = "results";
-            final String POSTERPATH = "poster_path";
-            final String OVERVIEW = "overview";
-            final String RELEASEDATE = "release_date";
-            final String ORIGINALTITLE = "original_title";
-            final String VOTEAVERAGE = "vote_average";
-
-            JSONObject jsonReceived = new JSONObject(str);
-            JSONArray results = jsonReceived.getJSONArray(RESULTS);
-            List<MovieDetails> result = new ArrayList<>();
-            for(int i = 0; i < results.length(); i++){
-                JSONObject jsonObject = results.getJSONObject(i);
-                String path = jsonObject.getString(POSTERPATH);
-                /*
-                If path contains null, no image can be shown.
-                As question just demands gridview to contain thumbnails, then there will be no movie name or image for user to know about the movie.
-                Hence, skipping such movies at all.
-                 */
-                if(!path.equals("null")){
-                    result.add(new MovieDetails(jsonObject.getString(POSTERPATH), jsonObject.getString(OVERVIEW), jsonObject.getString(RELEASEDATE), jsonObject.getString(ORIGINALTITLE), jsonObject.getDouble(VOTEAVERAGE)));
-                }
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            super.onProgressUpdate(values);
+            if(values[0].equals(INTERNET_ERROR_CODE)){
+                Toast.makeText(getActivity().getApplicationContext(), getString(R.string.main_activity_fragment_toast_internet_connectivity_prob), Toast.LENGTH_LONG).show();
             }
-            return result;
         }
 
         @Override
-        protected void onPostExecute(Void voidval) {
-            super.onPostExecute(voidval);
-            setListView();
+        protected void onPostExecute(Void aVoid) {
+            super.onPostExecute(aVoid);
+            if (movieDetailsList != null && !movieDetailsList.isEmpty()) {
+                setListView();
+            } else {
+                Log.d(LOG_TAG, "onPostExecute -> movieDetailsList is empty or null");
+            }
         }
     }
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if(requestCode == FROM_MAINACTIVITY_TO_SETTINGS){
+        if (requestCode == FROM_MAINACTIVITY_TO_SETTINGS) {
+            moviePosterAdapter.clear();
             decideTitle();
-            new DiscoverMoviesTask().execute();
+            new DownloadTask().execute();
         }
     }
 }

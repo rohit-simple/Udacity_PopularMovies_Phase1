@@ -12,10 +12,15 @@ import android.widget.TextView;
 
 import com.squareup.picasso.Picasso;
 
-/**
- * A placeholder fragment containing a simple view.
- */
+import butterknife.Bind;
+import butterknife.ButterKnife;
+
 public class MovieDetailsActivityFragment extends Fragment {
+    @Bind(R.id.movie_details_title) protected TextView originalTitleTextView;
+    @Bind(R.id.movie_details_release_date) protected TextView releaseDateTextView;
+    @Bind(R.id.movie_details_vote_average) protected TextView voteAverageTextView;
+    @Bind(R.id.movie_details_overview) protected TextView overviewTextView;
+    @Bind(R.id.movie_details_poster) protected ImageView posterImageView;
 
     public MovieDetailsActivityFragment() {
     }
@@ -24,15 +29,9 @@ public class MovieDetailsActivityFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_movie_details, container, false);
-
-        TextView originalTitleTextView = (TextView) view.findViewById(R.id.movie_details_title);
-        TextView releaseDateTextView = (TextView) view.findViewById(R.id.movie_details_release_date);
-        TextView voteAverageTextView = (TextView) view.findViewById(R.id.movie_details_vote_average);
-        TextView overviewTextView = (TextView) view.findViewById(R.id.movie_details_overview);
-        ImageView posterImageView = (ImageView) view.findViewById(R.id.movie_details_poster);
+        ButterKnife.bind(this, view);
 
         Intent intent = getActivity().getIntent();
-
         if(intent != null) {
             if (intent.hasExtra(MainActivityFragment.EXTRA_ORIGINAL_TITLE)) {
                 originalTitleTextView.setText(intent.getStringExtra(MainActivityFragment.EXTRA_ORIGINAL_TITLE));
@@ -56,7 +55,11 @@ public class MovieDetailsActivityFragment extends Fragment {
             }
             if (intent.hasExtra(MainActivityFragment.EXTRA_POSTER_PATH)) {
                 String path = intent.getStringExtra(MainActivityFragment.EXTRA_POSTER_PATH);
-                Picasso.with(getActivity()).load("http://image.tmdb.org/t/p/w185" + path).into(posterImageView);
+                Picasso.with(getActivity())
+                        .load("http://image.tmdb.org/t/p/w185" + path)
+                        .placeholder(R.drawable.loading)
+                        .error(R.drawable.no_image)
+                        .into(posterImageView);
             }
         }
         return view;

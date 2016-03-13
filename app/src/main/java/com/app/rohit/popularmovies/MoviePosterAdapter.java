@@ -11,37 +11,50 @@ import com.squareup.picasso.Picasso;
 
 import java.util.List;
 
-/**
- * Created by rohit on 3/12/2016.
- */
+import butterknife.Bind;
+import butterknife.ButterKnife;
+
 public class MoviePosterAdapter extends ArrayAdapter<String> {
-    final private String LOG_TAG = MoviePosterAdapter.class.getSimpleName();
+    private final String LOG_TAG = MoviePosterAdapter.class.getSimpleName();
+    private final Integer MY_ROW_TYPE = 0;
 
     public MoviePosterAdapter(Activity activity, List<String> list){
         super(activity, 0, list);
     }
 
     @Override
+    public int getItemViewType(int position) {
+        return MY_ROW_TYPE;
+    }
+
+    @Override
     public View getView(int position, View convertView, ViewGroup parent) {
+        ViewHolder viewHolder;
         String path = getItem(position);
 
-        if(convertView == null){
+        if(convertView == null || getItemViewType(position) != MY_ROW_TYPE){
             convertView = LayoutInflater.from(getContext()).inflate(R.layout.grid_movie, parent, false);
-        }
-        ViewHolder viewHolder = (ViewHolder) convertView.getTag();
-        if(viewHolder == null){
-            viewHolder = new ViewHolder();
-            viewHolder.imageView = (ImageView) convertView.findViewById(R.id.grid_movie_poster);
+            viewHolder = new ViewHolder(convertView);
             convertView.setTag(viewHolder);
+        }else{
+            viewHolder = (ViewHolder) convertView.getTag();
         }
 
         String httpPath = "http://image.tmdb.org/t/p/w185" + path;
-        Picasso.with(getContext()).load(httpPath).into(viewHolder.imageView);
+        Picasso.with(getContext())
+                .load(httpPath)
+                .placeholder(R.drawable.loading)
+                .error(R.drawable.no_image)
+                .into(viewHolder.imageView);
 
         return convertView;
     }
 
-    private class ViewHolder{
-        ImageView imageView;
+    static class ViewHolder{
+        @Bind(R.id.grid_movie_poster) ImageView imageView;
+
+        ViewHolder(View view){
+            ButterKnife.bind(this, view);
+        }
     }
 }

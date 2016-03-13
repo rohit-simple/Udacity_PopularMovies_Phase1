@@ -5,6 +5,8 @@
     <string name="title_activity_settings">Settings Screen</string>
     <string name="title_activity_movie_details">Movie Details</string>
 
+    <string name="main_activity_fragment_toast_internet_connectivity_prob">Unable to connect to server, maybe internet is down or you are not connected!</string>
+
     <string name="action_settings">Settings</string>
     <string name="action_sort_by_label">Sort By</string>
     <string name="action_sort_by_key" translatable="false">sort_by</string>
