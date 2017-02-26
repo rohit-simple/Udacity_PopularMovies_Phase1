@@ -1,7 +1,7 @@
 # Popular Movies Stage 1
 This Android app:
 * Presents the user with a grid arrangement of movie posters upon launch.
-* Allows the user to change sort order via a setting.
+* Allows the user to change sort order via a setting
   * The sort order can be by most popular or by highest-rated
 * Allows the user to tap on a movie poster and transition to a details screen with additional information such as:
   * original title
