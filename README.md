@@ -12,7 +12,8 @@ This Android app:
 
 ## Getting Started
 This project uses the Gradle build system. 
-To build this project, 
+To build this project,
+
 1. Use "Import Project" in Android Studio
 2. Go to app/build.gradle
 3. Replace PASTE_YOUR_THEMOVIEDB_API_KEY_HERE with your api_key registered under api.themoviedb.org
